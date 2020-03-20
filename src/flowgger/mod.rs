@@ -31,6 +31,8 @@ extern crate toml;
 use self::config::Config;
 #[cfg(feature = "gelf")]
 use self::decoder::GelfDecoder;
+#[cfg(feature = "json")]
+use self::decoder::JsonDecoder;
 #[cfg(feature = "ltsv")]
 use self::decoder::LTSVDecoder;
 #[cfg(feature = "rfc3164")]
@@ -43,6 +45,8 @@ use self::encoder::CapnpEncoder;
 use self::encoder::Encoder;
 #[cfg(feature = "gelf")]
 use self::encoder::GelfEncoder;
+#[cfg(feature = "json")]
+use self::encoder::JsonEncoder;
 #[cfg(feature = "ltsv")]
 use self::encoder::LTSVEncoder;
 #[cfg(feature = "rfc3164")]
@@ -236,6 +240,26 @@ fn get_gelf_decoder(_config: &Config) -> ! {
     panic!("Support for Gelf hasn't been compiled in")
 }
 
+#[cfg(feature = "json")]
+fn get_json_encoder(config: &Config) -> Box<dyn Encoder + Send> {
+    Box::new(JsonEncoder::new(config)) as Box<dyn Encoder + Send>
+}
+
+#[cfg(not(feature = "json"))]
+fn get_json_encoder(_config: &Config) -> ! {
+    panic!("Support for Json hasn't been compiled in")
+}
+
+#[cfg(feature = "json")]
+fn get_json_decoder(config: &Config) -> Box<dyn Decoder + Send> {
+    Box::new(JsonDecoder::new(config)) as Box<dyn Decoder + Send>
+}
+
+#[cfg(not(feature = "json"))]
+fn get_json_decoder(_config: &Config) -> ! {
+    panic!("Support for Json hasn't been compiled in")
+}
+
 #[cfg(feature = "ltsv")]
 fn get_ltvs_encoder(config: &Config) -> Box<dyn Encoder + Send> {
     Box::new(LTSVEncoder::new(config)) as Box<dyn Encoder + Send>
@@ -319,6 +343,7 @@ pub fn start(config_file: &str) {
             Box::new(InvalidDecoder::new(&config)) as Box<dyn Decoder + Send>
         }
         "gelf" => get_gelf_decoder(&config),
+        "json" => get_json_decoder(&config),
         "ltsv" => get_ltvs_decoder(&config),
         "rfc5424" => get_decoder_rfc5424(&config),
         "rfc3164" => get_decoder_rfc3164(&config),
@@ -332,7 +357,8 @@ pub fn start(config_file: &str) {
         });
     let encoder = match output_format {
         "capnp" => get_capnp_encoder(&config),
-        "gelf" | "json" => get_gelf_encoder(&config),
+        "gelf" => get_gelf_encoder(&config),
+        "json" => get_json_encoder(&config),
         "ltsv" => get_ltvs_encoder(&config),
         "rfc3164" => get_encoder_rfc3164(&config),
         "rfc5424" => get_encoder_rfc5424(&config),

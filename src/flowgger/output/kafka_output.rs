@@ -1,13 +1,24 @@
-use super::Output;
-use crate::flowgger::config::Config;
-use crate::flowgger::merger::Merger;
-use kafka::producer::{Compression, Producer, Record, RequiredAcks};
+extern crate openssl;
+
+use std::thread;
 use std::io::{stderr, Write};
 use std::process::exit;
-use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::sync::mpsc::Receiver;
 use std::time::Duration;
+
+use kafka::client::KafkaClient;
+use kafka::producer::{Compression, Producer, Record, RequiredAcks};
+use log::{debug, error, info};
+
+use crate::flowgger::config::Config;
+use crate::flowgger::merger::Merger;
+
+use super::Output;
+use super::super::kafka::client::SecurityConfig;
+
+use self::openssl::ssl::{SslConnector, SslFiletype, SslMethod, SslVerifyMode};
+
 
 const KAFKA_DEFAULT_ACKS: i16 = 0;
 const KAFKA_DEFAULT_COALESCE: usize = 1;
@@ -28,6 +39,10 @@ struct KafkaConfig {
     timeout: Duration,
     coalesce: usize,
     compression: Compression,
+    ssl_cert_path: Option<String>,
+    ssl_key_path: Option<String>,
+    ssl_ca_cert_path: Option<String>,
+    ssl_host_verify: bool,
 }
 
 struct KafkaWorker<'a> {
@@ -45,14 +60,55 @@ impl<'a> KafkaWorker<'a> {
             1 => RequiredAcks::One,
             _ => panic!("Unsupported value for kafka_acks"),
         };
-        let producer = Producer::from_hosts(config.brokers.clone())
-            .with_required_acks(acks)
-            .with_ack_timeout(config.timeout)
-            .with_compression(config.compression);
+
+        // ~ If certificates are specified, configure SSL
+        let producer =
+            if let (Some(ccert), Some(ckey)) = (config.ssl_cert_path.clone(), config.ssl_key_path.clone()) {
+                let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
+
+                debug!("loading cert-file={}, key-file={}", ccert, ckey);
+                builder.set_cipher_list("DEFAULT").unwrap();
+                builder.set_verify(SslVerifyMode::PEER); // TODO: This is only for testing!
+                builder.set_certificate_file(ccert, SslFiletype::PEM).unwrap();
+                builder.set_private_key_file(ckey, SslFiletype::PEM).unwrap();
+                builder.check_private_key().unwrap();
+
+
+                if let Some(ca_cert_path) = config.ssl_ca_cert_path.clone() {
+                    debug!("Setting ca certificates to {}", ca_cert_path);
+                    builder.set_ca_file(ca_cert_path).unwrap();
+                } else {
+                    builder.set_default_verify_paths().unwrap();
+                }
+
+                let connector = builder.build();
+
+                let mut client = KafkaClient::new_secure(
+                    config.brokers.clone(),
+                    SecurityConfig::new(connector).with_hostname_verification(config.ssl_host_verify),
+                );
+                client.set_client_id("log_producer".into());
+
+                debug!("Kafka ssl client hosts: {:?}, config: {:?}", config.brokers.clone(), client);
+
+                let producer_builder = Producer::from_client(client)
+                    .with_required_acks(acks)
+                    .with_ack_timeout(config.timeout)
+                    .with_compression(config.compression);
+                producer_builder
+            } else {
+                info!("Connecting to non-ssl Kafka at {:?}", config.brokers.clone());
+                let producer_builder = Producer::from_hosts(config.brokers.clone())
+                    .with_required_acks(acks)
+                    .with_ack_timeout(config.timeout)
+                    .with_compression(config.compression);
+                producer_builder
+            };
+
         let producer = match producer.create() {
             Ok(producer) => producer,
             Err(e) => {
-                println!("Unable to connect to Kafka: [{}]", e);
+                error!("Unable to connect to Kafka: [{}]", e);
                 exit(1);
             }
         };
@@ -71,6 +127,7 @@ impl<'a> KafkaWorker<'a> {
                 Ok(line) => line,
                 Err(_) => return,
             };
+            debug!("sending to kafka: {}", String::from_utf8(bytes.clone()).unwrap());
             match self
                 .producer
                 .send(&Record::from_value(&self.config.topic, bytes))
@@ -90,6 +147,7 @@ impl<'a> KafkaWorker<'a> {
                 Ok(line) => line,
                 Err(_) => return,
             };
+            debug!("sending to kafka: {}", String::from_utf8(bytes.clone()).unwrap());
             let message = Record {
                 key: (),
                 partition: -1,
@@ -180,6 +238,27 @@ impl KafkaOutput {
             "snappy" => Compression::SNAPPY,
             _ => panic!("Unsupported compression method"),
         };
+        let ssl_cert_path = config
+            .lookup("output.kafka_ssl_cert_path")
+            .map(|x| x.as_str()
+                .expect("output.kafka_ssl_cert_path must be a string")
+            ).map(|x| String::from(x));
+
+        let ssl_key_path = config
+            .lookup("output.kafka_ssl_key_path")
+            .map(|x| x.as_str()
+                .expect("output.kafka_ssl_key_path must be a string")
+            ).map(|x| String::from(x));
+        let ssl_ca_cert_path = config
+            .lookup("output.kafka_ssl_ca_cert_path")
+            .map(|x| x.as_str()
+                .expect("output.kafka_ssl_ca_cert_path must be a string")
+            ).map(|x| String::from(x));
+        let ssl_host_verify = config
+            .lookup("output.kafka_ssl_host_verify")
+            .map_or(true, |x| x.as_bool()
+                .expect("output.kafka_ssl_host_verify must be a bool"),
+            );
         let kafka_config = KafkaConfig {
             acks,
             brokers,
@@ -187,6 +266,10 @@ impl KafkaOutput {
             timeout,
             coalesce,
             compression,
+            ssl_cert_path,
+            ssl_key_path,
+            ssl_ca_cert_path,
+            ssl_host_verify,
         };
         KafkaOutput {
             config: kafka_config,

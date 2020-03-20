@@ -1,6 +1,8 @@
 #[cfg(feature = "gelf")]
 mod gelf_decoder;
 mod invalid_decoder;
+#[cfg(feature = "json")]
+mod json_decoder;
 #[cfg(feature = "ltsv")]
 mod ltsv_decoder;
 #[cfg(feature = "rfc3164")]
@@ -11,6 +13,8 @@ mod rfc5424_decoder;
 #[cfg(feature = "gelf")]
 pub use self::gelf_decoder::GelfDecoder;
 pub use self::invalid_decoder::InvalidDecoder;
+#[cfg(feature = "json")]
+pub use self::json_decoder::JsonDecoder;
 #[cfg(feature = "ltsv")]
 pub use self::ltsv_decoder::LTSVDecoder;
 #[cfg(feature = "rfc3164")]

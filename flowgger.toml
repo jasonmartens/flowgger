@@ -8,12 +8,12 @@
 # type = "stdin"
 
 ### File input
-# type = "file"
-# src = "/var/lib/docker/containers/*/*.log"
+type = "file"
+src = "./test.log"
 
 ### Syslog over UDP
-type = "udp"
-listen = "0.0.0.0:514"
+#type = "udp"
+#listen = "0.0.0.0:514"
 
 ### TCP
 # type = "tcp"
@@ -69,7 +69,9 @@ listen = "0.0.0.0:514"
 
 ### Syslog
 #format = "rfc3164"
-format = "rfc3164"
+#format = "rfc3164"
+
+format = "json"
 
 ####################
 #   Output type    #
@@ -81,20 +83,20 @@ format = "rfc3164"
 #type = "stdout"
 
 ### File output
-type = "file"
-file_path = "output.log"
+#type = "file"
+#file_path = "output.log"
 # Optional: Enables bufferized output. If rotation is used, must be smaller than file_rotation_size.
-file_buffer_size = 512
+#file_buffer_size = 512
 
 # Optional: Enables file rotation once the specified size is reached.
-file_rotation_size = 2048
+#file_rotation_size = 2048
 
 # Optional: Enables file rotation based on time. Rotation occur every file_rotation_time minutes
-file_rotation_time = 2
+#file_rotation_time = 2
 
 # Optional: When time rotation is enabled, the timestamp format is appended to the filenames.
 # Default is set to "%Y%m%dT%H%M%SZ". Format must conform to https://docs.rs/chrono/0.3.1/chrono/format/strftime/index.html
-file_rotation_timeformat = "%Y%m%dT%H%M%SZ"
+#file_rotation_timeformat = "%Y%m%dT%H%M%SZ"
 
 # Optional, only used if either file_rotation_size or file_rotation_time is set:
 # Specifies number of rotation files to use. The default value is 50.
@@ -102,14 +104,19 @@ file_rotation_timeformat = "%Y%m%dT%H%M%SZ"
 #file_rotation_maxfiles = 2
 
 ### Kafka output
-# type = "kafka"
-# kafka_brokers = [ "172.16.205.129:9092", "172.16.205.130:9092" ]
-# kafka_topic = "test"
+ type = "kafka"
+ kafka_brokers = [ "localhost:9093" ]
+ kafka_topic = "logs"
 # kafka_threads = 1
 # kafka_coalesce = 1000
 # kafka_timeout = 60000
-# kafka_acks = 0
+# kafka_acks = 1
 # kafka_compression = "none"
+# SSL/TLS config for Kafka, not to be confused with the separate TLS output below
+kafka_ssl_cert_path = "/Users/jmartens/code/flowgger/service.crt"
+kafka_ssl_key_path = "/Users/jmartens/code/flowgger/service.key"
+kafka_ssl_ca_cert_path = "/Users/jmartens/code/flowgger/issuing_ca.crt"
+kafka_ssl_host_verify = false
 
 ### TLS output
 # type = "tls"
@@ -133,8 +140,8 @@ file_rotation_timeformat = "%Y%m%dT%H%M%SZ"
 ####################
 
 ### JSON (GELF)
-# format = "gelf"
-# framing = "nul"
+format = "json"
+#framing = "line"
 # [output.gelf_extra]
 # x-header1 = "x-header1 value"
 # x-header2 = "x-header2 value"
@@ -154,7 +161,7 @@ file_rotation_timeformat = "%Y%m%dT%H%M%SZ"
 # x-header2 = "x-header2 value"
 
 ### Syslog
-framing = "line"
-format = "rfc3164"
+#framing = "line"
+#format = "rfc3164"
 # Format of the optional timestamp to be prepended to each event
-rfc3164_prepend_timestamp="[%Y-%m-%dT%H:%M:%S%.6fZ]"
+#rfc3164_prepend_timestamp="[%Y-%m-%dT%H:%M:%S%.6fZ]"

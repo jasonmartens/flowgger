@@ -2,6 +2,8 @@
 mod capnp_encoder;
 #[cfg(feature = "gelf")]
 mod gelf_encoder;
+#[cfg(feature = "json")]
+mod json_encoder;
 #[cfg(feature = "ltsv")]
 mod ltsv_encoder;
 #[cfg(feature = "rfc3164")]
@@ -13,6 +15,8 @@ mod rfc5424_encoder;
 pub use self::capnp_encoder::CapnpEncoder;
 #[cfg(feature = "gelf")]
 pub use self::gelf_encoder::GelfEncoder;
+#[cfg(feature = "json")]
+pub use self::json_encoder::JsonEncoder;
 #[cfg(feature = "ltsv")]
 pub use self::ltsv_encoder::LTSVEncoder;
 #[cfg(feature = "rfc3164")]

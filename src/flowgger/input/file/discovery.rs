@@ -89,7 +89,10 @@ impl FileDiscovery {
     fn start_initial_workers(&self) {
         for entry in glob(self.path_match.as_str()).expect("Failed to read glob pattern") {
             match entry {
-                Ok(path) => self.start_worker(&path, true),
+                Ok(path) => {
+                    println!("Adding {} to watch list.", path.clone().into_os_string().into_string().unwrap());
+                    self.start_worker(&path, false);
+                }
                 Err(e) => panic!("Failed to read glob entry: {}", e),
             };
         }

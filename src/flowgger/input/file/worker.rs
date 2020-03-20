@@ -1,16 +1,18 @@
 use std;
 use std::fs::File;
-use std::io::prelude::*;
-use std::io::stderr;
+use std::io::{stderr, stdout};
 use std::io::{BufReader, SeekFrom};
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, SyncSender};
 use std::time::Duration;
 
-use notify::{watcher, RecursiveMode, Watcher};
+use notify::{RecursiveMode, Watcher};
 
 use crate::flowgger::decoder::Decoder;
 use crate::flowgger::encoder::Encoder;
+
+use super::super::super::notify::RecommendedWatcher;
 
 pub struct FileWorker {
     path: PathBuf,
@@ -36,11 +38,14 @@ impl FileWorker {
 
     pub fn run(&mut self, from_tail: bool) {
         let (tx, rx) = channel();
-        let mut watcher = watcher(tx, Duration::from_secs(2)).expect("Cannot create file watcher");
+        let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2))
+            .expect("Cannot create file watcher");
         watcher
             .watch(&self.path, RecursiveMode::NonRecursive)
             .unwrap();
 
+        println!("Starting reader for {}", &self.path.to_str().unwrap());
+        stdout().flush().expect("Failed to flush stdout");
         let fr = FollowReader::new(&self.path, from_tail);
         let mut reader = BufReader::new(fr);
         let mut buffer = Vec::new();
@@ -50,10 +55,14 @@ impl FileWorker {
         let mut finish = false;
         while !finish {
             match rx.recv() {
-                Ok(_) => loop {
+                Ok(evt) => loop {
+                    println!("Watcher received event:{:?}", evt);
+                    stdout().flush().expect("Failed to flush stdout");
                     let r = reader.read_until(10, &mut buffer);
                     match r {
                         Ok(bytes_read) => {
+                            println!("Read {} bytes from {}", bytes_read, &self.path.to_str().unwrap());
+                            stdout().flush().expect("Failed to flush stdout");
                             if bytes_read == 0 {
                                 break;
                             }
@@ -70,9 +79,15 @@ impl FileWorker {
                         if let Err(e) = handle_record(&line, &self.tx, &decoder, &encoder) {
                             let _ = writeln!(stderr(), "{}: [{}]", e, line.trim());
                         }
+                    } else {
+                        println!("Buffer not full, waiting for it to fill...");
+                        stdout().flush().expect("Failed to flush stdout");
                     }
                 },
-                Err(_) => {}
+                Err(err) => {
+                    println!("RecvError in watcher: {}", err.to_string());
+                    stdout().flush().expect("Failed to flush stdout");
+                }
             }
         }
     }
@@ -113,6 +128,8 @@ fn handle_record(
     decoder: &Box<dyn Decoder>,
     encoder: &Box<dyn Encoder>,
 ) -> Result<(), &'static str> {
+    println!("reading log line: {}", line);
+    stdout().flush().expect("Failed to flush stdout");
     let decoded = decoder.decode(line)?;
     let reencoded = encoder.encode(decoded)?;
     tx.send(reencoded).unwrap();
